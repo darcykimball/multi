@@ -85,6 +85,12 @@ int main() {
   bullet_ref.explode();
 
 
+  using disp =
+  multi::multi_dispatcher<
+    object, 2, void, collide_impl, true,
+    ship, asteroid, shot
+    >;
+
   multi::multi_dispatcher<
     object, 2, void, collide_impl, true,
     ship, asteroid, shot
