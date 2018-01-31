@@ -66,6 +66,15 @@ struct collide_impl<ship, asteroid> {
 };
 
 
+template <>
+struct collide_impl<shot, asteroid> {
+  void operator()(shot& s, asteroid& a) {
+    std::cout << "Collision: Shot " << s._name << " destroyed asteroid "
+      << a._name << '\n';
+  }
+};
+
+
 int main() {
   using namespace std::string_literals;
 
@@ -85,17 +94,28 @@ int main() {
   bullet_ref.explode();
 
 
-  using disp =
-  multi::multi_dispatcher<
-    object, 2, void, collide_impl, true,
-    ship, asteroid, shot
-    >;
+  using dispatcher =
+    multi::multi_dispatcher<
+      object, 2, void, collide_impl, false,
+      ship, asteroid, shot
+      >;
 
-  multi::multi_dispatcher<
-    object, 2, void, collide_impl, true,
-    ship, asteroid, shot
-    > collide;
+  dispatcher collide;
 
+  // XXX: Should fail with static assertion; wrong arity
+  //collide(our_hero, our_hero, baddie);
+  
+
+  // XXX: Should fail with static assertion; type mismatch
+  //auto huh = "huh"s;
+  //collide(our_hero, huh);
+
+
+  // Alright. Fingers crossed.
+  collide(hero_ref, baddie_ref);
+  collide(hero_ref, bullet_ref);
+  collide(bullet_ref, baddie_ref);
+  collide(hero_ref, hero_ref); // Doesn't make sense, but whatever
 
 
 

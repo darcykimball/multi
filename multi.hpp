@@ -3,7 +3,7 @@
 
 
 #include <functional>
-#include <iostream> // FIXME
+//#include <iostream> // FIXME
 #include <tuple>
 #include <type_traits>
 #include <typeinfo>
@@ -11,46 +11,9 @@
 #include <map>
 
 #include <boost/hana.hpp>
-#include <boost/hana/experimental/printable.hpp>
+//#include <boost/hana/experimental/printable.hpp>
 
 #include "util.hpp"
-
-
-// FIXME
-struct object;
-struct ship;
-struct shot;
-
-
-namespace detail {
-
-// Here we go
-namespace hana = boost::hana;
-
-
-// Get all possible argument-type combinations
-// XXX: All supplied types must be distinct
-// TODO: use some sort of canonical ordering, etc.
-// FIXME: wait, just use hana::cartesian_product
-template <typename Tuple, typename Size>
-constexpr auto all_combos(Tuple&& types, Size&& n) {
-  return hana::cartesian_product(hana::replicate<hana::tuple_tag>(types, n));
-}
-
-
-
-// These are expected to be hana type constants.
-auto get_type_indices = [](auto&& types) {
-  return hana::transform(types, [](auto&& t) {
-      return std::type_index(typeid(typename decltype(+t)::type));
-    }
-  );
-};
-
-
-
-
-} // namespace detail
 
 
 namespace multi {
@@ -132,40 +95,47 @@ public:
   multi_dispatcher() {
     // Setup dispatch table
     constexpr auto combos =
-      detail::all_combos(hana::tuple_t<Ts...>, hana::size_c<Arity>);
-
-
-    std::cout << hana::experimental::print(hana::type_c<map_type>) << '\n';
-    std::cout << hana::experimental::print(combos) << '\n';
+      util::all_combos(hana::tuple_t<Ts...>, hana::size_c<Arity>);
     
 
     hana::for_each(combos, [this](auto&& c) {
       using wrapper =
         typename decltype(hana::unpack(c, hana::template_<wrap>))::type;
 
-      std::cout << hana::experimental::print(hana::type_c<decltype(wrapper::wrapped)>) << '\n';
 
-
-      //this->_dispatch_table.insert(
-      //  std::make_pair(
-      //    hana::unpack(detail::get_type_indices(c),
-      //      [](auto&& ...indices) {
-      //        return key_type{std::forward<decltype(indices)>(indices)...};
-      //      }
-      //    ),
-      //    // FIXME/TODO: what's the cleanest way to do this???
-      //    wrapper::wrapped
-      //  )
-      //); 
+      this->_dispatch_table.insert(
+        std::make_pair(
+          hana::unpack(util::get_type_indices(c),
+            [](auto&& ...indices) {
+              return key_type{std::forward<decltype(indices)>(indices)...};
+            }
+          ),
+          // FIXME/TODO: what's the cleanest way to do this???
+          wrapper::wrapped
+        )
+      ); 
     });
   }
 
 
-  template <typename ...Unused>
-  Ret operator()(always_base<Unused>& ...args) {
+  // TODO: Ideally, this would be (partially, somehow) specialized for
+  // statically determinable calls, like
+  // 
+  //   dispatch(ship, rock);
+  //
+  // because, well, the point of a multi-dispatcher is to handle calls like:
+  //
+  //   dispatch(obj1, obj2);
+  //
+  template <typename ...Args>
+  Ret operator()(Args& ...args) {
     // XXX: Hopefully this is the sanest place to induce an error
-    static_assert(sizeof...(Unused) == Arity,
+    static_assert(sizeof...(Args) == Arity,
       "Arity mismatch for multimethod call");
+
+
+    static_assert(std::conjunction<std::is_base_of<Base, Args>...>::value,
+      "Arguments for multimethod call are not derived from specified base");
 
    
     // TODO: (Statically) check that the supplied template params are a
@@ -180,13 +150,12 @@ public:
 
 
     // FIXME: how to guarantee this'll be optimized out? probably will be?
-    if (IsTotal) {
+    if constexpr (IsTotal) {
       return found->second(args...);
-    }
-
-
-    if (found != _dispatch_table.end()) {
-      return found->second(args...);
+    } else {
+      if (found != _dispatch_table.end()) {
+        return found->second(args...);
+      }
     }
 
     // Didn't find it.
